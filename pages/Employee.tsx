@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, Plus, FileText, CheckCircle, Clock } from 'lucide-react';
+import { Upload, Plus, FileText, CheckCircle, Clock, X, Image as ImageIcon, File as FileIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MOCK_CERTIFICATES } from '../constants';
 import { CertStatus } from '../types';
@@ -9,13 +9,70 @@ import { GlassCard, PrimaryButton, StatusBadge, ProgressRing } from '../componen
 export const EmployeeDashboard = () => {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Mock Upload Handler
+  const handleFile = (file: File) => {
+    // Validate file type
+    if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+      // Validate file size (e.g., 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('File size must be less than 5MB');
+        return;
+      }
+
+      setSelectedFile(file);
+      if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        setPreviewUrl(url);
+      } else {
+        setPreviewUrl(null);
+      }
+    } else {
+      toast.error('Only Image (JPG, PNG) or PDF files are allowed.');
+    }
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    toast.success("File uploaded successfully! Awaiting verification.");
-    setIsUploadOpen(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFile(e.target.files[0]);
+    }
+  };
+
+  const handleUpload = () => {
+    if (!selectedFile) {
+      toast.error("Please select a file first.");
+      return;
+    }
+
+    const loadingToast = toast.loading("Uploading certificate...");
+    
+    // Simulate network delay
+    setTimeout(() => {
+      toast.dismiss(loadingToast);
+      toast.success("File uploaded successfully! Awaiting verification.");
+      setIsUploadOpen(false);
+      // Reset state
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }, 1500);
+  };
+
+  const clearFile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   return (
@@ -95,20 +152,69 @@ export const EmployeeDashboard = () => {
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center transition-colors ${
-                  isDragging ? 'border-brand-cyan bg-brand-cyan/10' : 'border-white/20 hover:border-white/40'
+                onClick={() => fileInputRef.current?.click()}
+                className={`group border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center transition-all cursor-pointer relative overflow-hidden ${
+                  isDragging 
+                    ? 'border-brand-cyan bg-brand-cyan/10' 
+                    : selectedFile 
+                      ? 'border-brand-cyan/50 bg-brand-cyan/5'
+                      : 'border-white/20 hover:border-white/40 hover:bg-white/5'
                 }`}
               >
-                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
-                  <Upload className={isDragging ? 'text-brand-cyan' : 'text-slate-400'} size={32} />
-                </div>
-                <p className="text-lg font-medium">Drag & Drop file here</p>
-                <p className="text-sm text-slate-500 mt-2">PDF, JPG or PNG up to 5MB</p>
+                <input 
+                  type="file" 
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept="image/*,.pdf"
+                  onChange={handleFileSelect}
+                />
+
+                {selectedFile ? (
+                  <div className="w-full flex flex-col items-center animate-in fade-in zoom-in duration-300">
+                    <button 
+                      onClick={clearFile}
+                      className="absolute top-2 right-2 p-1 rounded-full bg-black/50 hover:bg-red-500/80 text-white transition-colors z-20"
+                    >
+                      <X size={16} />
+                    </button>
+
+                    {previewUrl ? (
+                      <div className="relative w-full h-40 rounded-lg overflow-hidden mb-4 border border-white/10">
+                        <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-20 h-20 rounded-xl bg-white/10 flex items-center justify-center mb-4 text-red-400">
+                        <FileIcon size={40} />
+                      </div>
+                    )}
+                    
+                    <p className="font-medium truncate max-w-[200px]">{selectedFile.name}</p>
+                    <p className="text-xs text-slate-500 mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className={`w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 transition-transform group-hover:scale-110 duration-300`}>
+                      <Upload className={isDragging ? 'text-brand-cyan' : 'text-slate-400'} size={32} />
+                    </div>
+                    <p className="text-lg font-medium">Click to upload or drag & drop</p>
+                    <p className="text-sm text-slate-500 mt-2">PDF, JPG or PNG up to 5MB</p>
+                  </>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 mt-6">
-                <button onClick={() => setIsUploadOpen(false)} className="px-4 py-2 text-slate-400 hover:text-white transition">Cancel</button>
-                <PrimaryButton onClick={(e: any) => handleDrop(e)}>Upload</PrimaryButton>
+                <button 
+                  onClick={() => setIsUploadOpen(false)} 
+                  className="px-4 py-2 text-slate-400 hover:text-white transition"
+                >
+                  Cancel
+                </button>
+                <PrimaryButton 
+                  onClick={handleUpload}
+                  className={!selectedFile ? 'opacity-50 cursor-not-allowed' : ''}
+                >
+                  Upload Certificate
+                </PrimaryButton>
               </div>
             </motion.div>
           </div>
